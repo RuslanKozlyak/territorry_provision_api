@@ -160,3 +160,7 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+cache/
+.vscode/PythonImportHelper-v2-Completion.json
+project_info.pickle
+gdf_with_obj.geojson
