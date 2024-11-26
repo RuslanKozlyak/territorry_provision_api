@@ -4,10 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
 from api.utils.const import API_TITLE, API_DESCRIPTION
-from api.routers.social import social_controller
-from api.routers.transport import transport_controller
+from api.routers.effects import effects_controller
 
-controllers = [social_controller, transport_controller]
+controllers = [effects_controller]
 
 async def on_startup():
     ...
