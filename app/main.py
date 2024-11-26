@@ -3,10 +3,10 @@ from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
-from utils.const import API_TITLE, API_DESCRIPTION
-from routers.my_router import my_controller
+from api.utils.const import API_TITLE, API_DESCRIPTION
+from api.routers.effects import effects_controller
 
-controllers = [my_controller]
+controllers = [effects_controller]
 
 async def on_startup():
     ...

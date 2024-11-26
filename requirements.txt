@@ -1,5 +1,8 @@
-# fastapi
-# pydantic
-# loguru
-idu_clients@ git+https://github.com/vasilstar97/idu-clients.git@develop
 blocksnet @ git+https://github.com/aimclub/blocksnet.git@develop
+fastapi
+pydantic
+loguru
+pydantic-geojson
+requests
+geopandas
+pyarrow
