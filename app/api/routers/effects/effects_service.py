@@ -1,9 +1,12 @@
 import os
 import random
 import requests
+import shapely
+import json
 import pandas as pd
-from api.utils import const
+import geopandas as gpd
 from blocksnet.models import ServiceType
+from api.utils import const
 from . import effects_models as em
 
 def _get_file_path(project_scenario_id : int):
@@ -80,7 +83,28 @@ def get_data(project_scenario_id : int, scale_type : em.ScaleType, effect_type :
   if effect_type == em.EffectType.PROVISION:
     return _get_provision_data(project_scenario_id, scale_type)
   return _get_transport_data(project_scenario_id, scale_type)
-  
+
+def _get_scenario_by_id(scenario_id : int, token : str) -> dict:
+  res = requests.get(const.URBAN_API + f'/api/v1/scenarios/{scenario_id}', headers={'Authorization': f'Bearer {token}'})
+  res.raise_for_status()
+  return res.json()
+
+def _get_project_by_id(project_id : int, token : str) -> dict:
+  res = requests.get(const.URBAN_API + f'/api/v1/projects/{project_id}/territory', headers={'Authorization': f'Bearer {token}'})
+  res.raise_for_status()
+  return res.json()
+
+def _fetch_project_geometry(project_scenario_id : int, token : str) -> shapely.BaseGeometry:
+  """
+  Fetch project geometry (not context tho)
+  """
+  project_id = _get_scenario_by_id(project_scenario_id, token)['project']['project_id']
+  project_info = _get_project_by_id(project_id, token)
+  geometry_json = json.dumps(project_info['geometry'])
+  return shapely.from_geojson(geometry_json)
+
+def get_layer(project_scenario_id : int, scale_type : em.ScaleType, effect_type : em.EffectType) -> gpd.GeoDataFrame:
+  ...
 
 def evaluate_effects(region_id : int, project_scenario_id : int, token : str):
-  ... # TODO назначение этой штуки в том чтоб чето сделать и сохранить локально гдфку
+  ... # TODO назначение этой штуки в том чтоб чето сделать, сохранить локально гдфки и записать тэп в БД
