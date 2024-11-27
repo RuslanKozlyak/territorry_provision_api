@@ -17,16 +17,16 @@ def get_effect_type() -> list[str]:
 def get_service_types(region_id : int) -> list[ServiceType]:
   return es._get_bn_service_types(region_id)
 
-@router.get('/layer')
-@decorators.gdf_to_geojson
-def get_spatial_layer(project_scenario_id : int, scale_type : em.ScaleType, effect_type : em.EffectType):
-  return es.get_layer(project_scenario_id, scale_type, effect_type)
+# @router.get('/layer')
+# @decorators.gdf_to_geojson
+# def get_spatial_layer(project_scenario_id : int, scale_type : em.ScaleType, effect_type : em.EffectType, token : str = Depends(auth.verify_token)):
+#   return es.get_layer(project_scenario_id, scale_type, effect_type, token)
 
 @router.get('/data')
 def get_chart_data(project_scenario_id : int, scale_type : em.ScaleType, effect_type : em.EffectType) -> list[em.ChartData]:
   return es.get_data(project_scenario_id, scale_type, effect_type)
 
 @router.post('/evaluate')
-def evaluate(background_tasks : BackgroundTasks, region_id : int, project_scenario_id : int, token : str = Depends(auth.verify_token)):
-  background_tasks.add_task(es.evaluate_effects, region_id, project_scenario_id, token)
+def evaluate(background_tasks : BackgroundTasks, project_scenario_id : int, token : str = Depends(auth.verify_token)):
+  background_tasks.add_task(es.evaluate_effects, project_scenario_id, token)
   return const.EVALUATION_RESPONSE_MESSAGE
