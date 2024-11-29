@@ -11,6 +11,7 @@ class ScaleType(Enum):
   CONTEXT='Контекст'
 
 class ChartData(BaseModel):
-  x : str
-  y : Literal['before', 'after', 'delta']
-  value : float
+  name : str
+  before : float
+  after : float
+  delta : float

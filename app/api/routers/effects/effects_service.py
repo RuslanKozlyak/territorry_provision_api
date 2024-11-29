@@ -18,23 +18,31 @@ def _get_provision_data(project_scenario_id : int, scale_type : em.ScaleType) ->
   service_types = service_type_service.get_bn_service_types(1)
   results = []
   for st in service_types:
-    x = st.name
+    name = st.name
     before = round(random.random(),2)
     after = round(random.random(),2)
     delta = round(after - before,2)
-    for y, value in {'before': before, 'after': after, 'delta': delta}.items():
-      results.append({'x' : x, 'y' : y, 'value' : value})
+    results.append({
+      'name': name,
+      'before': before,
+      'after': after,
+      'delta': delta
+    })
   return results
 
 def _get_transport_data(project_scenario_id : int, scale_Type : em.ScaleType) -> list[em.ChartData]:
   #TODO its a placeholder
   results = []
-  for x in ['Среднее', 'Медиана', 'Мин', 'Макс']:
+  for name in ['Среднее', 'Медиана', 'Мин', 'Макс']:
     before = random.randint(30,60)
     after = random.randint(30,60)
     delta = after - before
-    for y, value in {'before': before, 'after': after, 'delta': delta}.items():
-      results.append({'x' : x, 'y' : y, 'value' : value})
+    results.append({
+      'name': name,
+      'before': before,
+      'after': after,
+      'delta': delta
+    })
   return results
 
 def get_data(project_scenario_id : int, scale_type : em.ScaleType, effect_type : em.EffectType) -> list[em.ChartData]:
