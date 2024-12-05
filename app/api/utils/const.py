@@ -12,5 +12,5 @@ else:
 if 'URBAN_API' in os.environ:
   URBAN_API = os.environ['URBAN_API']
 else:
-  URBAN_API = 'http://10.32.1.107:5300'
+  URBAN_API = 'https://urban-api-testing.idu.kanootoko.org'#'http://10.32.1.107:5300'
   # raise Exception('No URBAN_API in env file')
