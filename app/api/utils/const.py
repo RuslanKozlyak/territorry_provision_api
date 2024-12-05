@@ -7,7 +7,7 @@ DEFAULT_CRS = 4326
 if 'DATA_PATH' in os.environ:
   DATA_PATH = os.environ['DATA_PATH']
 else:
-  DATA_PATH = 'data'
+  DATA_PATH = 'app/data'
   # raise Exception('No DATA_PATH in env file')
 if 'URBAN_API' in os.environ:
   URBAN_API = os.environ['URBAN_API']

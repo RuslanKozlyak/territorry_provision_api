@@ -2,7 +2,9 @@ import requests
 import shapely
 import json
 from loguru import logger
-from api.utils import const
+
+from app.api.utils import const
+
 
 def _get_scenarios_by_project_id(project_id : int, token : str) -> dict:
   res = requests.get(const.URBAN_API + f'/api/v1/projects/{project_id}/scenarios', headers={'Authorization': f'Bearer {token}'})

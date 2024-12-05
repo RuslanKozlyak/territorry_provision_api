@@ -1,8 +1,11 @@
 
 import requests
 import pandas as pd
-from api.utils import const
+
 from blocksnet.models import ServiceType
+
+from app.api.utils import const
+
 
 def _get_service_types(region_id : int) -> pd.DataFrame:
   res = requests.get(const.URBAN_API + f'/api/v1/territory/{region_id}/service_types')
