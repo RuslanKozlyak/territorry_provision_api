@@ -1,12 +1,11 @@
 import geopandas as gpd
 import momepy
 import networkx as nx
-
-from app.api.routers.effects.services.project_service import *
+from . import project_service as ps
 
 
 def get_scenario_gdf(project_scenario_id, token):
-    context_with_obj = get_context_with_obj_by_id(project_scenario_id, token)
+    context_with_obj = ps.get_context_with_obj_by_id(project_scenario_id, token)
     scenario_gdf = gpd.GeoDataFrame.from_features(context_with_obj["features"])
     scenario_gdf.set_crs(epsg=4326,inplace=True)
     return scenario_gdf

@@ -1,9 +1,9 @@
 import os
 import random
 import geopandas as gpd
-from blocksnet import BlocksGenerator, AccessibilityProcessor, Provision, City
+from blocksnet import BlocksGenerator, AccessibilityProcessor, Provision, City, Connectivity
 
-from app.api.utils import const
+from api.utils import const
 from . import effects_models as em
 from .services import blocksnet_service, project_service, service_type_service
 from .services.blocksnet_service import *
@@ -12,11 +12,9 @@ from .services.project_service import *
 from .services.project_service import _get_scenarios_by_project_id
 
 
-def _get_file_path(project_scenario_id : int, is_based: bool):
-    file_path = f'{project_scenario_id}'
-    if is_based:
-      file_path += 'based'
-    return os.path.join(const.DATA_PATH, f'{file_path}.parquet')
+def _get_file_path(project_scenario_id : int, effect_type : em.EffectType):
+  file_path = f'{project_scenario_id}_{effect_type.name}'
+  return os.path.join(const.DATA_PATH, f'{file_path}.parquet')
 
 def _fetch_city_model(region_id : int, project_scenario_id : int, token: str, scale : em.ScaleType):
   service_types = service_type_service.get_bn_service_types(region_id)
@@ -115,55 +113,37 @@ def get_data(project_scenario_id : int, scale_type : em.ScaleType, effect_type :
     return _get_provision_data(project_scenario_id, scale_type)
   return _get_transport_data(project_scenario_id, scale_type)
 
-# def _gridify(gdf): # TODO remove
+def _evaluate_transport(project_scenario_id : int, city_model : City):
+  logger.info('Evaluating transport')
+  conn = Connectivity(city_model=city_model, verbose=False)
+  conn_gdf = conn.calculate()
+  file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION)
+  conn_gdf.to_parquet(file_path)
 
+def _evaluate_provision(project_scenario_id : int, city_model : City):
+  logger.info('Evaluating provision')
+  blocks_gdf = city_model.get_blocks_gdf()[['geometry']]
 
-# def _get_provision_layer(project_gdf): # TODO неправильный вход 
-#   service_types = service_type_service.get_bn_service_types(1)
+  for st in city_model.service_types:
+    prov = Provision(city_model=city_model, verbose=False)
+    prov_gdf = prov.calculate(st)
+    for column in ['provision', 'demand', 'demand_within']:
+      blocks_gdf[f'{st.name}_{column}'] = prov_gdf[column]
 
-
-# def _get_transport_layer(project_gdf): # TODO неправильный вход
-#   ...
-
-# def get_layer(project_scenario_id : int, scale_type : em.ScaleType, effect_type : em.EffectType, token : str) -> gpd.GeoDataFrame:
-#   # TODO placeholder
-#   project_info = project_service.get_project_info(project_scenario_id, token)
-#   project_geometry = project_info['geometry']
-#   project_gdf = gpd.GeoDataFrame(geometry=[project_geometry], crs=const.DEFAULT_CRS)
-#   local_crs = project_gdf.estimate_utm_crs()
-#   project_gdf = project_gdf.to_crs(local_crs)
-#   if scale_type == em.ScaleType.CONTEXT:
-#     project_gdf.geometry = project_gdf.buffer(3_000) # TODO placeholder
-#   if effect_type == em.EffectType.PROVISION:
-#     return _get_provision_layer(project_gdf)
-#   return _get_transport_layer(project_gdf)
+  file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION)
+  blocks_gdf.to_parquet(file_path)
+  logger.success('Provision successfully evaluated!')
 
 def evaluate_effects(project_scenario_id : int, token : str):
-  # TODO назначение этой штуки в том чтоб чето сделать, сохранить локально гдфки и записать тэп в БД
+  logger.info('Fetching project info')
   project_info = project_service.get_project_info(project_scenario_id, token)
+  logger.info('Fetching region service types')
   service_types = service_type_service.get_bn_service_types(1)
 
-  scenarios = _get_scenarios_by_project_id(project_info['project_id'], token)
-  based_scenario = list(filter(lambda x: x['is_based'], scenarios))[0]['scenario_id']
+  logger.info('Fetching city model')
+  city_model = _fetch_city_model(project_info['region_id'], project_scenario_id, token, 1)
 
-  city_before = _fetch_city_model(project_info['region_id'], based_scenario, token, 1)
-  city_after = _fetch_city_model(project_info['region_id'], project_scenario_id, token, 1)
-  gdf_before = city_before.get_blocks_gdf()[['geometry']]
-  gdf_after = city_after.get_blocks_gdf()[['geometry']]
-
-  for st in service_types:
-    prov = Provision(city_model=city_before)
-    prov_before = prov.calculate(st)
-
-    prov = Provision(city_model=city_after)
-    prov_after = prov.calculate(st)
-
-    gdf_before[f'{st.name}_provision'] = prov_before['provision']
-    gdf_after[f'{st.name}_provision'] = prov_after['provision']
-
-  based_file_path = _get_file_path(project_scenario_id, is_based=True)
-  file_path = _get_file_path(project_scenario_id, is_based=False)
-  gdf_before.to_parquet(based_file_path)
-  gdf_after.to_parquete(file_path)
+  _evaluate_transport(project_scenario_id, city_model)
+  _evaluate_provision(project_scenario_id, city_model)
   
   

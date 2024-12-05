@@ -1,7 +1,7 @@
 
 import requests
 import pandas as pd
-from app.api.utils import const
+from api.utils import const
 from blocksnet.models import ServiceType
 
 def _get_service_types(region_id : int) -> pd.DataFrame:
