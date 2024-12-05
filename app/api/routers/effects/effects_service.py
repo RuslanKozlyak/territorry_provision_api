@@ -11,12 +11,14 @@ from .services.project_service import *
 from .services.project_service import *
 from .services.project_service import _get_scenarios_by_project_id
 
+PROVISION_COLUMNS = ['provision', 'demand', 'demand_within']
 
-def _get_file_path(project_scenario_id : int, effect_type : em.EffectType):
-  file_path = f'{project_scenario_id}_{effect_type.name}'
+def _get_file_path(project_scenario_id : int, effect_type : em.EffectType, scale_type : em.ScaleType):
+  file_path = f'{project_scenario_id}_{effect_type.name}_{scale_type.name}'
   return os.path.join(const.DATA_PATH, f'{file_path}.parquet')
 
 def _fetch_city_model(region_id : int, project_scenario_id : int, token: str, scale : em.ScaleType):
+  region_id = project_info['region_id']
   service_types = service_type_service.get_bn_service_types(region_id)
   physical_object_types = get_physical_object_types()
   scenario_gdf = get_scenario_gdf(project_scenario_id, token)
@@ -69,8 +71,8 @@ def _fetch_city_model(region_id : int, project_scenario_id : int, token: str, sc
 
 def _get_provision_data(project_scenario_id : int, scale_type : em.ScaleType) -> list[em.ChartData]:
   #TODO its a placeholder
-  based_file_path = _get_file_path(project_scenario_id, is_based=True)
-  file_path = _get_file_path(project_scenario_id, is_based=False)
+  based_file_path = _get_file_path(project_scenario_id)
+  file_path = _get_file_path(project_scenario_id)
 
   gdf_before = gpd.read_parquet(based_file_path)
   gdf_after = gpd.read_parquet(file_path)
@@ -113,6 +115,53 @@ def get_data(project_scenario_id : int, scale_type : em.ScaleType, effect_type :
     return _get_provision_data(project_scenario_id, scale_type)
   return _get_transport_data(project_scenario_id, scale_type)
 
+def get_transport_layer(project_scenario_id : int, scale_type : em.ScaleType, token : str):
+  ... # TODO найти файл нужный и вернуть дельту в сравнении с базовым сценарием
+
+def get_transport_data(project_scenario_id : int, scale_type : em.ScaleType, token : str):
+  ... # TODO найти нужный файл и вернуть дельту как тут:
+  # [
+  #   {
+  #     "name": "Среднее",
+  #     "before": 44,
+  #     "after": 36,
+  #     "delta": -8
+  #   },
+  #   {
+  #     "name": "Медиана",
+  #     "before": 33,
+  #     "after": 60,
+  #     "delta": 27
+  #   },
+  #   {
+  #     "name": "Мин",
+  #     "before": 40,
+  #     "after": 31,
+  #     "delta": -9
+  #   },
+  #   {
+  #     "name": "Макс",
+  #     "before": 38,
+  #     "after": 54,
+  #     "delta": 16
+  #   }
+  # ]
+
+def get_provision_layer(project_scenario_id : int, scale_type : em.ScaleType, service_type_id : int, token : str):
+  ... # TODO найти файл нужный и вернуть дельту в сравнении с базовым сценарием
+
+def get_provision_data(project_scenario_id : int, scale_type : em.ScaleType, token : str):
+  ... # TODO найти нужный файл и вернуть дельту в сравнении с базовым сценарием
+  # [
+  #   {
+  #     "name": "Школа",
+  #     "before": 1,
+  #     "after": 0,
+  #     "delta": -1
+  #   },
+  #   ...
+  # ]
+
 def _evaluate_transport(project_scenario_id : int, city_model : City):
   logger.info('Evaluating transport')
   conn = Connectivity(city_model=city_model, verbose=False)
@@ -127,7 +176,7 @@ def _evaluate_provision(project_scenario_id : int, city_model : City):
   for st in city_model.service_types:
     prov = Provision(city_model=city_model, verbose=False)
     prov_gdf = prov.calculate(st)
-    for column in ['provision', 'demand', 'demand_within']:
+    for column in PROVISION_COLUMNS:
       blocks_gdf[f'{st.name}_{column}'] = prov_gdf[column]
 
   file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION)
@@ -143,9 +192,10 @@ def evaluate_effects(project_scenario_id : int, token : str):
   service_types = service_type_service.get_bn_service_types(1)
 
   logger.info('Fetching city model')
-  city_model = _fetch_city_model(project_info['region_id'], project_scenario_id, token, 1)
+  project_model = _fetch_city_model(project_info['region_id'], project_scenario_id, token, em.ScaleType.PROJECT)
+  context_model = _fetch_city_model() # TODO boundaries заменить на context_geometry из project_info
 
-  _evaluate_transport(project_scenario_id, city_model)
-  _evaluate_provision(project_scenario_id, city_model)
+  _evaluate_transport(project_scenario_id, project_model)
+  _evaluate_provision(project_scenario_id, project_model)
   
   

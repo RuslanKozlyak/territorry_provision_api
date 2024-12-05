@@ -18,10 +18,25 @@ def get_effect_type() -> list[str]:
 def get_service_types(region_id : int) -> list[ServiceType]:
   return sts.get_bn_service_types(region_id)
 
-# @router.get('/layer')
-# @decorators.gdf_to_geojson
-# def get_spatial_layer(project_scenario_id : int, scale_type : em.ScaleType, effect_type : em.EffectType, token : str = Depends(auth.verify_token)):
-#   return es.get_layer(project_scenario_id, scale_type, effect_type, token)
+@router.get('/transport_layer')
+@decorators.gdf_to_geojson
+def get_transport_layer(project_scenario_id : int, scale_type : em.ScaleType, token : str = Depends(auth.verify_token)):
+  return es.get_transport_layer(project_scenario_id, scale_type, token)
+
+@router.get('/provision_layer')
+@decorators.gdf_to_geojson
+def get_provision_layer(project_scenario_id : int, scale_type : em.ScaleType, service_type_id : int, token : str = Depends(auth.verify_token)):
+  return es.get_provision_layer(project_scenario_id, scale_type, service_type_id, token)
+
+@router.get('/transport_data')
+@decorators.gdf_to_geojson
+def get_transport_data():
+  ...
+
+@router.get('/provision_data')
+@decorators.gdf_to_geojson
+def get_provision_data():
+  ...
 
 @router.get('/data')
 def get_chart_data(project_scenario_id : int, scale_type : em.ScaleType, effect_type : em.EffectType) -> list[em.ChartData]:
