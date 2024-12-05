@@ -2,7 +2,20 @@ import requests
 import shapely
 import json
 from loguru import logger
-from api.utils.const import URBAN_API
+from app.api.utils import const
+
+def _get_scenarios_by_project_id(project_id : int, token : str) -> dict:
+  res = requests.get(const.URBAN_API + f'/api/v1/projects/{project_id}/scenarios', headers={'Authorization': f'Bearer {token}'})
+  res.raise_for_status()
+  return res.json()
+
+def get_context_with_obj_by_id(scenario_id : int, token : str):
+    res = requests.get(const.URBAN_API + f'/api/v1/scenarios/{scenario_id}/context/geometries_with_all_objects', headers={'Authorization': f'Bearer {token}'}, verify=False)
+    return res.json()
+    
+def get_physical_object_types():
+    res = requests.get(const.URBAN_API + f'/api/v1/physical_object_types', verify=False)
+    return res.json()
 
 def _get_scenario_by_id(scenario_id : int, token : str) -> dict:
   res = requests.get(URBAN_API + f'/api/v1/scenarios/{scenario_id}', headers={'Authorization': f'Bearer {token}'})

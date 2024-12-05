@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, BackgroundTasks
-from api.utils import auth, const, decorators
+from app.api.utils import auth, const, decorators
 from blocksnet.models import ServiceType
 from . import effects_service as es, effects_models as em
 

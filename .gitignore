@@ -164,3 +164,6 @@ cache/
 .vscode/PythonImportHelper-v2-Completion.json
 project_info.pickle
 gdf_with_obj.geojson
+boundaries.parquet
+roads.parquet
+water.parquet
