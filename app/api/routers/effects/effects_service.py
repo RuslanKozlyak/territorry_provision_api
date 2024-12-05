@@ -135,6 +135,8 @@ def _evaluate_provision(project_scenario_id : int, city_model : City):
   logger.success('Provision successfully evaluated!')
 
 def evaluate_effects(project_scenario_id : int, token : str):
+  # TODO проверяем, является ли этот сценарий базовым. 
+  # Если не является, проверяем, посчитан ли у нас базовый и считаем его
   logger.info('Fetching project info')
   project_info = project_service.get_project_info(project_scenario_id, token)
   logger.info('Fetching region service types')
