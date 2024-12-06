@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
-
 from blocksnet.models import ServiceType
-from . import effects_service as es, effects_models as em
+from fastapi import APIRouter, BackgroundTasks, Depends
+
+from ...utils import auth, const, decorators
+from . import effects_models as em
+from . import effects_service as es
 from .services import service_type_service as sts
-from ...utils import auth, decorators, const
 
 router = APIRouter(prefix='/effects', tags=['Effects'])
 
+def on_startup(): # TODO оценка базовых сценариев
+    ...
 
 @router.get('/scale_type')
 def get_scale_type() -> list[str]:
