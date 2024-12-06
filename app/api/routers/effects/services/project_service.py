@@ -1,9 +1,9 @@
+import json
+
 import requests
 import shapely
-import json
+from api.utils import const
 from loguru import logger
-
-from app.api.utils import const
 
 
 def _get_scenarios_by_project_id(project_id : int, token : str) -> dict:

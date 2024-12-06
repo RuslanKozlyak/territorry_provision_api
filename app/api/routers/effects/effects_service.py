@@ -1,15 +1,16 @@
 import os
 import random
+
 import geopandas as gpd
-from blocksnet import BlocksGenerator, AccessibilityProcessor, Provision, City, Connectivity
+from blocksnet import (AccessibilityProcessor, BlocksGenerator, City,
+                       Connectivity, Provision)
 
-
+from ...utils import const
 from . import effects_models as em
 from .services import blocksnet_service, project_service, service_type_service
 from .services.blocksnet_service import *
 from .services.project_service import *
 from .services.project_service import _get_scenarios_by_project_id
-from ...utils import const
 
 PROVISION_COLUMNS = ['provision', 'demand', 'demand_within']
 
@@ -26,23 +27,19 @@ def _fetch_city_model(project_info: dict,
                       scale: em.ScaleType):
     if scale == em.ScaleType.PROJECT:
         scenario_gdf = gpd.clip(scenario_gdf, project_info['geometry'])
-        boundaries = get_boundaries(scenario_gdf)
+        boundaries = get_boundaries(scenario_gdf) # TODO заменить на границы проекта
     if scale == em.ScaleType.CONTEXT:
         boundaries = gpd.GeoDataFrame(geometry=[project_info['context']])
         boundaries = boundaries.set_crs(epsg=4326)
 
+    local_crs = boundaries.estimate_utm_crs()
     water = get_water(scenario_gdf, physical_object_types)
     roads = get_roads(scenario_gdf, physical_object_types)
     buildings = get_buildings(scenario_gdf, physical_object_types)
     services = get_services(service_types, scenario_gdf)
 
-    local_crs = 32636  # TODO Заменить на estimmate crs
-    scenario_gdf.to_crs(local_crs, inplace=True)
-    boundaries.to_crs(local_crs, inplace=True)
-    water.to_crs(local_crs, inplace=True)
-    roads.to_crs(local_crs, inplace=True)
-    buildings.to_crs(local_crs, inplace=True)
-    services.to_crs(local_crs, inplace=True)
+    for gdf in [scenario_gdf, boundaries, water, roads, buildings, services]:
+        gdf.to_crs(local_crs, inplace=True)
 
     blocks_generator = BlocksGenerator(
         boundaries=boundaries,
@@ -50,7 +47,7 @@ def _fetch_city_model(project_info: dict,
         water=water
     )
     blocks = blocks_generator.run()
-    blocks['land_use'] = 'residential'  # TODO ЗАмнить на норм land_use??
+    blocks['land_use'] = None  # TODO ЗАмнить на норм land_use?? >> здесь должен быть этап определения лендюза по тому что есть в бд
 
     ap = AccessibilityProcessor(blocks=blocks)
     graph = roads_to_graph(roads)

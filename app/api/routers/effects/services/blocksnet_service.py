@@ -1,6 +1,7 @@
 import geopandas as gpd
 import momepy
 import networkx as nx
+
 from . import project_service as ps
 
 

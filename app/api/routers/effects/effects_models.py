@@ -1,6 +1,8 @@
 from enum import Enum
-from pydantic import BaseModel
 from typing import Literal
+
+from pydantic import BaseModel
+
 
 class EffectType(Enum):
   TRANSPORT='Транспорт'

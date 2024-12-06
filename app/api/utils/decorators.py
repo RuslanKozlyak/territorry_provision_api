@@ -1,6 +1,8 @@
 import json
-import geopandas as gpd
 from functools import wraps
+
+import geopandas as gpd
+
 # from shapely import set_precision
 
 PRECISION_GRID_SIZE = 0.0001
@@ -38,8 +40,8 @@ def gdf_to_geojson(func):
     ```
     """
     @wraps(func)
-    async def process(*args, **kwargs):
-        gdf = (await func(*args, **kwargs)).to_crs(4326)
+    def process(*args, **kwargs):
+        gdf = func(*args, **kwargs).to_crs(4326)
         # gdf.geometry = set_precision(gdf.geometry, grid_size=PRECISION_GRID_SIZE)
         return json.loads(gdf.to_json())
     return process

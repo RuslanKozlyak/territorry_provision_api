@@ -1,16 +1,17 @@
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
 
-from app.api.routers.effects import effects_controller
-from app.api.utils.const import API_DESCRIPTION, API_TITLE
+from api.routers.effects import effects_controller
+from api.utils.const import API_DESCRIPTION, API_TITLE
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import RedirectResponse
 
 controllers = [effects_controller]
 
 async def on_startup():
-    ...
+    for c in controllers:
+        c.on_startup()
 
 async def on_shutdown():
     ...
