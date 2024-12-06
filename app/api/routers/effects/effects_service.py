@@ -41,8 +41,6 @@ def _fetch_city_model(project_info: dict,
     boundaries.to_crs(local_crs, inplace=True)
     water.to_crs(local_crs, inplace=True)
     roads.to_crs(local_crs, inplace=True)
-    print('aaaa')
-    print(roads.crs)
     buildings.to_crs(local_crs, inplace=True)
     services.to_crs(local_crs, inplace=True)
 
@@ -79,14 +77,18 @@ def _fetch_city_model(project_info: dict,
     return city
 
 
-def _get_provision_data(project_scenario_id: int, scale_type: em.ScaleType, token: str) -> list[em.ChartData]:
+def get_provision_data(project_scenario_id: int, scale_type: em.ScaleType, token: str) -> list[em.ChartData]:
+    # TODO Вынести логику получения двух гдф и возврата ошибки
     project_info = project_service.get_project_info(project_scenario_id, token)
     based_scenario_id = get_based_scenario_id(project_info, token)
 
     file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION, scale_type)
     based_file_path = _get_file_path(based_scenario_id, em.EffectType.PROVISION, scale_type)
+    try:
+        gdf_before = gpd.read_parquet(based_file_path)
+    except:
+        return f'Базовый сценарий id {based_scenario_id} не существует'
 
-    gdf_before = gpd.read_parquet(based_file_path)
     gdf_after = gpd.read_parquet(file_path)
 
     service_types = service_type_service.get_bn_service_types(project_info['region_id'])
@@ -118,7 +120,7 @@ def _get_total_provision(gdf_orig, name):
 
     for column in PROVISION_COLUMNS:
         new_column = column.replace(f'{name}_', '')
-        gdf = gdf.rename(columns={column: new_column})
+        gdf = gdf.rename(columns={f'{name}_{column}': new_column})
 
     return round(Provision.total(gdf), 2)
 
@@ -140,9 +142,9 @@ def _get_transport_data(project_scenario_id: int, scale_Type: em.ScaleType) -> l
     return results
 
 
-def get_data(project_scenario_id: int, scale_type: em.ScaleType, effect_type: em.EffectType) -> list[em.ChartData]:
+def get_data(project_scenario_id: int, scale_type: em.ScaleType, effect_type: em.EffectType, token: str) -> list[em.ChartData]:
     if effect_type == em.EffectType.PROVISION:
-        return _get_provision_data(project_scenario_id, scale_type)
+        return get_provision_data(project_scenario_id, scale_type, token)
     return _get_transport_data(project_scenario_id, scale_type)
 
 
@@ -181,20 +183,24 @@ def get_transport_data(project_scenario_id: int, scale_type: em.ScaleType, token
 
 
 def get_provision_layer(project_scenario_id: int, scale_type: em.ScaleType, service_type_id: int, token: str):
-    ...  # TODO найти файл нужный и вернуть дельту в сравнении с базовым сценарием
+    project_info = project_service.get_project_info(project_scenario_id, token)
+    based_scenario_id = get_based_scenario_id(project_info, token)
 
+    service_types = service_type_service.get_bn_service_types(project_info['region_id'])
+    service_type = list(filter(lambda x: x.code == str(service_type_id), service_types))[0]
+    print(service_type)
+    # TODO Если нет сервиса вернуть ошибку
 
-def get_provision_data(project_scenario_id: int, scale_type: em.ScaleType, token: str):
-    ...  # TODO найти нужный файл и вернуть дельту в сравнении с базовым сценарием
-    # [
-    #   {
-    #     "name": "Школа",
-    #     "before": 1,
-    #     "after": 0,
-    #     "delta": -1
-    #   },
-    #   ...
-    # ]
+    file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION, scale_type)
+    based_file_path = _get_file_path(based_scenario_id, em.EffectType.PROVISION, scale_type)
+
+    gdf_before = gpd.read_parquet(based_file_path)
+    gdf_after = gpd.read_parquet(file_path)
+
+    provision_column = f'{service_type.name}_provision'
+
+    gdf_after[provision_column] -= gdf_before[provision_column]
+    return gdf_after
 
 
 def _evaluate_transport(project_scenario_id: int, city_model: City, scale: em.ScaleType):
