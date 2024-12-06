@@ -196,10 +196,17 @@ def get_provision_layer(project_scenario_id: int, scale_type: em.ScaleType, serv
 
     provision_column = f'{service_type.name}_provision'
 
-    result_gdf = gdf_after[['geometry']]
-    result_gdf['before'] = gdf_before[provision_column]
-    result_gdf['after'] = gdf_after[provision_column]
-    result_gdf['delta'] = gdf_after[provision_column] - gdf_before[provision_column]
+    joined = gpd.sjoin(gdf_after, gdf_before, how='inner', predicate='intersects')
+
+    joined['delta'] = joined[f'{provision_column}_left'] - joined[f'{provision_column}_right']
+
+    result_gdf = joined[['geometry', f'{provision_column}_right', f'{provision_column}_left', 'delta']]
+    result_gdf = result_gdf.rename(
+        columns={
+            f'{provision_column}_right': 'before',
+            f'{provision_column}_left': 'after'
+        }
+    )
 
     return result_gdf
 
