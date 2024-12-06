@@ -27,7 +27,8 @@ def _fetch_city_model(project_info: dict,
                       scale: em.ScaleType):
     if scale == em.ScaleType.PROJECT:
         scenario_gdf = gpd.clip(scenario_gdf, project_info['geometry'])
-        boundaries = get_boundaries(scenario_gdf) # TODO заменить на границы проекта
+        boundaries = gpd.GeoDataFrame(geometry=[project_info['context']])
+        boundaries = boundaries.set_crs(epsg=4326)
     if scale == em.ScaleType.CONTEXT:
         boundaries = gpd.GeoDataFrame(geometry=[project_info['context']])
         boundaries = boundaries.set_crs(epsg=4326)
@@ -185,7 +186,6 @@ def get_provision_layer(project_scenario_id: int, scale_type: em.ScaleType, serv
 
     service_types = service_type_service.get_bn_service_types(project_info['region_id'])
     service_type = list(filter(lambda x: x.code == str(service_type_id), service_types))[0]
-    print(service_type)
     # TODO Если нет сервиса вернуть ошибку
 
     file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION, scale_type)
@@ -196,8 +196,12 @@ def get_provision_layer(project_scenario_id: int, scale_type: em.ScaleType, serv
 
     provision_column = f'{service_type.name}_provision'
 
-    gdf_after[provision_column] -= gdf_before[provision_column]
-    return gdf_after
+    result_gdf = gdf_after[['geometry']]
+    result_gdf['before'] = gdf_before[provision_column]
+    result_gdf['after'] = gdf_after[provision_column]
+    result_gdf['delta'] = gdf_after[provision_column] - gdf_before[provision_column]
+
+    return result_gdf
 
 
 def _evaluate_transport(project_scenario_id: int, city_model: City, scale: em.ScaleType):

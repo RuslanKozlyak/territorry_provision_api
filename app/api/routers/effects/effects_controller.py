@@ -33,7 +33,7 @@ def get_transport_layer(project_scenario_id: int, scale_type: em.ScaleType, toke
 
 
 @router.get('/provision_layer')
-# @decorators.gdf_to_geojson
+@decorators.gdf_to_geojson
 def get_provision_layer(project_scenario_id: int, scale_type: em.ScaleType, service_type_id: int,
                         token: str = Depends(auth.verify_token)):
     return es.get_provision_layer(project_scenario_id, scale_type, service_type_id, token)
