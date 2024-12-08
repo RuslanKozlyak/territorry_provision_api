@@ -1,3 +1,5 @@
+import os
+from loguru import logger
 from blocksnet.models import ServiceType
 from fastapi import APIRouter, BackgroundTasks, Depends
 from ...utils import auth, const, decorators
@@ -8,17 +10,9 @@ from .services import service_type_service as sts
 router = APIRouter(prefix='/effects', tags=['Effects'])
 
 def on_startup(): # TODO оценка базовых сценариев
-    ...
-
-
-# @router.get('/scale_type')
-# def get_scale_type() -> list[str]:
-#     return list(em.ScaleType)
-
-
-# @router.get('/effect_type')
-# def get_effect_type() -> list[str]:
-#     return list(em.EffectType)
+    if not os.path.exists(const.DATA_PATH):
+        logger.info(f'Creating data folder at {const.DATA_PATH}')
+        os.mkdir(const.DATA_PATH)
 
 
 @router.get('/service_types')

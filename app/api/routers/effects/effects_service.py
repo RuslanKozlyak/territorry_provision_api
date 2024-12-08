@@ -204,7 +204,7 @@ def evaluate_effects(project_scenario_id: int, token: str, reevaluate : bool = T
     logger.info('Fetching physical object types')
     physical_object_types = ps.get_physical_object_types()
     logger.info('Fetching scenario objects')
-    scenario_gdf = bs.get_scenario_gdf(project_scenario_id, token)
+    scenario_gdf = ps.get_scenario_objects(project_scenario_id, token)
 
     logger.info('Fetching project model')
     project_model = bs.fetch_city_model(project_info=project_info,
