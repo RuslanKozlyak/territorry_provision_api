@@ -173,5 +173,3 @@ water.parquet
 .idea/vcs.xml
 .idea/inspectionProfiles/profiles_settings.xml
 .idea/inspectionProfiles/Project_Default.xml
-app/data/135_PROVISION_CONTEXT.parquet
-app/data/135_PROVISION_PROJECT.parquet

@@ -1,7 +1,7 @@
 
 import pandas as pd
 import requests
-from .....api.utils import const
+from api.utils import const
 from blocksnet.models import ServiceType
 
 

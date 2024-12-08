@@ -1,117 +1,25 @@
 import os
 import random
-
 import geopandas as gpd
-from blocksnet import (AccessibilityProcessor, BlocksGenerator, City,
-                       Connectivity, Provision)
-
+import warnings
+import pandas as pd
+import numpy as np
+from urllib3.exceptions import InsecureRequestWarning
+from loguru import logger
+from shapely import intersection
+from blocksnet import (City, WeightedConnectivity, Connectivity, Provision)
 from ...utils import const
 from . import effects_models as em
-from .services import blocksnet_service, project_service, service_type_service
-from .services.blocksnet_service import *
-from .services.project_service import *
-from .services.project_service import _get_scenarios_by_project_id
+from .services import blocksnet_service as bs, project_service as ps, service_type_service as sts
+
+for warning in [pd.errors.PerformanceWarning, RuntimeWarning, pd.errors.SettingWithCopyWarning, InsecureRequestWarning]:
+    warnings.filterwarnings(action='ignore', category=warning)
 
 PROVISION_COLUMNS = ['provision', 'demand', 'demand_within']
-
 
 def _get_file_path(project_scenario_id: int, effect_type: em.EffectType, scale_type: em.ScaleType):
     file_path = f'{project_scenario_id}_{effect_type.name}_{scale_type.name}'
     return os.path.join(const.DATA_PATH, f'{file_path}.parquet')
-
-
-def _fetch_city_model(project_info: dict,
-                      scenario_gdf: gpd.GeoDataFrame,
-                      physical_object_types: dict,
-                      service_types: list,
-                      scale: em.ScaleType):
-    if scale == em.ScaleType.PROJECT:
-        scenario_gdf = gpd.clip(scenario_gdf, project_info['geometry'])
-        boundaries = gpd.GeoDataFrame(geometry=[project_info['context']])
-        boundaries = boundaries.set_crs(epsg=4326)
-    if scale == em.ScaleType.CONTEXT:
-        boundaries = gpd.GeoDataFrame(geometry=[project_info['context']])
-        boundaries = boundaries.set_crs(epsg=4326)
-
-    local_crs = boundaries.estimate_utm_crs()
-    water = get_water(scenario_gdf, physical_object_types)
-    roads = get_roads(scenario_gdf, physical_object_types)
-    buildings = get_buildings(scenario_gdf, physical_object_types)
-    services = get_services(service_types, scenario_gdf)
-
-    for gdf in [scenario_gdf, boundaries, water, roads, buildings, services]:
-        gdf.to_crs(local_crs, inplace=True)
-
-    blocks_generator = BlocksGenerator(
-        boundaries=boundaries,
-        roads=roads,
-        water=water
-    )
-    blocks = blocks_generator.run()
-    blocks['land_use'] = None  # TODO ЗАмнить на норм land_use?? >> здесь должен быть этап определения лендюза по тому что есть в бд
-
-    ap = AccessibilityProcessor(blocks=blocks)
-    graph = roads_to_graph(roads)
-    accessibility_matrix = ap.get_accessibility_matrix(graph=graph)
-
-    city = City(
-        blocks=blocks,
-        acc_mx=accessibility_matrix,
-    )
-    city.update_buildings(buildings)
-
-    for st in service_types:
-        city.add_service_type(st)
-
-    grouped = services.groupby('service_type_id')
-    service_type_dict = {service.code: service for service in service_types}
-
-    for service_type_code, sub_gdf in grouped:
-        sub_gdf['geometry'] = sub_gdf.geometry.centroid
-        service_type = service_type_dict.get(str(service_type_code), None)
-        if service_type is not None:
-            city.update_services(service_type, sub_gdf)
-
-    return city
-
-
-def get_provision_data(project_scenario_id: int, scale_type: em.ScaleType, token: str) -> list[em.ChartData]:
-    # TODO Вынести логику получения двух гдф и возврата ошибки
-    project_info = project_service.get_project_info(project_scenario_id, token)
-    based_scenario_id = get_based_scenario_id(project_info, token)
-
-    file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION, scale_type)
-    based_file_path = _get_file_path(based_scenario_id, em.EffectType.PROVISION, scale_type)
-    try:
-        gdf_before = gpd.read_parquet(based_file_path)
-    except:
-        return f'Базовый сценарий id {based_scenario_id} не существует'
-
-    gdf_after = gpd.read_parquet(file_path)
-
-    service_types = service_type_service.get_bn_service_types(project_info['region_id'])
-    results = []
-    for st in service_types:
-        name = st.name
-
-        before = _get_total_provision(gdf_before, name)
-        after = _get_total_provision(gdf_after, name)
-        delta = round(after - before, 2)
-
-        results.append({
-            'name': name,
-            'before': before,
-            'after': after,
-            'delta': delta
-        })
-    return results
-
-
-def get_based_scenario_id(project_info, token):
-    scenarios = _get_scenarios_by_project_id(project_info['project_id'], token)
-    based_scenario_id = list(filter(lambda x: x['is_based'], scenarios))[0]['scenario_id']
-    return based_scenario_id
-
 
 def _get_total_provision(gdf_orig, name):
     gdf = gdf_orig.copy()
@@ -122,101 +30,135 @@ def _get_total_provision(gdf_orig, name):
 
     return round(Provision.total(gdf), 2)
 
-
-def _get_transport_data(project_scenario_id: int, scale_Type: em.ScaleType) -> list[em.ChartData]:
-    # TODO its a placeholder
-    results = []
-
-    for name in ['Среднее', 'Медиана', 'Мин', 'Макс']:
-        before = random.randint(30, 60)
-        after = random.randint(30, 60)
-        delta = after - before
-        results.append({
-            'name': name,
-            'before': before,
-            'after': after,
-            'delta': delta
-        })
-    return results
-
-
-def get_data(project_scenario_id: int, scale_type: em.ScaleType, effect_type: em.EffectType, token: str) -> list[em.ChartData]:
-    if effect_type == em.EffectType.PROVISION:
-        return get_provision_data(project_scenario_id, scale_type, token)
-    return _get_transport_data(project_scenario_id, scale_type)
-
+def _sjoin_gdfs(gdf_before : gpd.GeoDataFrame, gdf_after : gpd.GeoDataFrame):
+    gdf_before = gdf_before.to_crs(gdf_after.crs)
+    gdf_sjoin = gdf_after.sjoin(gdf_before, how='left', predicate='intersects', lsuffix='after', rsuffix='before')
+    gdf_sjoin['index_after'] = gdf_sjoin.index
+    gdf_sjoin['area'] = gdf_sjoin.apply(lambda s : gdf_before.loc[s['index_before'], 'geometry'].intersection(gdf_after.loc[s['index_after'], 'geometry']).area, axis=1)
+    gdf_sjoin = gdf_sjoin.sort_values(by='area')
+    return gdf_sjoin.drop_duplicates(subset=['index_after'], keep='last')
 
 def get_transport_layer(project_scenario_id: int, scale_type: em.ScaleType, token: str):
-    ...  # TODO найти файл нужный и вернуть дельту в сравнении с базовым сценарием
+    project_info = ps.get_project_info(project_scenario_id, token)
+    based_scenario_id = ps.get_based_scenario_id(project_info, token)
 
+    # get both files
+    before_file_path = _get_file_path(based_scenario_id, em.EffectType.TRANSPORT, scale_type)
+    after_file_path = _get_file_path(project_scenario_id, em.EffectType.TRANSPORT, scale_type)
+
+    gdf_before = gpd.read_parquet(before_file_path)
+    gdf_after = gpd.read_parquet(after_file_path)
+
+    # calculate delta
+    gdf_delta = _sjoin_gdfs(gdf_before, gdf_after)
+    gdf_delta = gdf_delta.rename(columns={
+        'weighted_connectivity_before': 'before',
+        'weighted_connectivity_after': 'after'
+    })[['geometry', 'before', 'after']]
+    gdf_delta['delta'] = gdf_delta['after'] - gdf_delta['before']
+
+    # round digits
+    for column in ['before', 'after', 'delta']:
+        gdf_delta[column] = gdf_delta[column].apply(round)
+
+    return gdf_delta
 
 def get_transport_data(project_scenario_id: int, scale_type: em.ScaleType, token: str):
-    ...  # TODO найти нужный файл и вернуть дельту как тут:
-    # [
-    #   {
-    #     "name": "Среднее",
-    #     "before": 44,
-    #     "after": 36,
-    #     "delta": -8
-    #   },
-    #   {
-    #     "name": "Медиана",
-    #     "before": 33,
-    #     "after": 60,
-    #     "delta": 27
-    #   },
-    #   {
-    #     "name": "Мин",
-    #     "before": 40,
-    #     "after": 31,
-    #     "delta": -9
-    #   },
-    #   {
-    #     "name": "Макс",
-    #     "before": 38,
-    #     "after": 54,
-    #     "delta": 16
-    #   }
-    # ]
+    project_info = ps.get_project_info(project_scenario_id, token)
+    based_scenario_id = ps.get_based_scenario_id(project_info, token)
 
+    # get both files
+    before_file_path = _get_file_path(based_scenario_id, em.EffectType.TRANSPORT, scale_type)
+    after_file_path = _get_file_path(project_scenario_id, em.EffectType.TRANSPORT, scale_type)
+
+    gdf_before = gpd.read_parquet(before_file_path)
+    gdf_after = gpd.read_parquet(after_file_path)
+
+    # calculate chart data
+    names_funcs = {
+        'Среднее': np.mean,
+        'Медиана': np.median,
+        'Мин': np.min,
+        'Макс': np.max
+    }
+
+    items = []
+    for name, func in names_funcs.items():
+        before = func(gdf_before['weighted_connectivity'])
+        after = func(gdf_after['weighted_connectivity'])
+        delta = after - before
+        items.append({
+            'name': name,
+            'before': round(before),
+            'after': round(after),
+            'delta': round(delta)
+        })
+    return items
 
 def get_provision_layer(project_scenario_id: int, scale_type: em.ScaleType, service_type_id: int, token: str):
-    project_info = project_service.get_project_info(project_scenario_id, token)
-    based_scenario_id = get_based_scenario_id(project_info, token)
+    project_info = ps.get_project_info(project_scenario_id, token)
+    based_scenario_id = ps.get_based_scenario_id(project_info, token)
 
-    service_types = service_type_service.get_bn_service_types(project_info['region_id'])
+    service_types = sts.get_bn_service_types(project_info['region_id'])
     service_type = list(filter(lambda x: x.code == str(service_type_id), service_types))[0]
-    # TODO Если нет сервиса вернуть ошибку
 
-    file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION, scale_type)
-    based_file_path = _get_file_path(based_scenario_id, em.EffectType.PROVISION, scale_type)
+    before_file_path = _get_file_path(based_scenario_id, em.EffectType.PROVISION, scale_type)
+    after_file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION, scale_type)
 
-    gdf_before = gpd.read_parquet(based_file_path)
-    gdf_after = gpd.read_parquet(file_path)
+    gdf_before = gpd.read_parquet(before_file_path)
+    gdf_after = gpd.read_parquet(after_file_path)
 
     provision_column = f'{service_type.name}_provision'
 
-    joined = gpd.sjoin(gdf_after, gdf_before, how='inner', predicate='intersects')
+    # calculate delta
+    gdf_delta = _sjoin_gdfs(gdf_before, gdf_after)
+    gdf_delta = gdf_delta.rename(columns={
+        f'{provision_column}_before': 'before',
+        f'{provision_column}_after': 'after'
+    })[['geometry', 'before', 'after']]
+    gdf_delta['delta'] = gdf_delta['after'] - gdf_delta['before']
 
-    joined['delta'] = joined[f'{provision_column}_left'] - joined[f'{provision_column}_right']
+    for column in ['before', 'after', 'delta']:
+        gdf_delta[column] = gdf_delta[column].apply(lambda v : round(v,2))
 
-    result_gdf = joined[['geometry', f'{provision_column}_right', f'{provision_column}_left', 'delta']]
-    result_gdf = result_gdf.rename(
-        columns={
-            f'{provision_column}_right': 'before',
-            f'{provision_column}_left': 'after'
-        }
-    )
+    return gdf_delta
 
-    return result_gdf
 
+def get_provision_data(project_scenario_id: int, scale_type: em.ScaleType, token: str) -> list[em.ChartData]:
+    project_info = ps.get_project_info(project_scenario_id, token)
+    based_scenario_id = ps.get_based_scenario_id(project_info, token)
+
+    before_file_path = _get_file_path(based_scenario_id, em.EffectType.PROVISION, scale_type)
+    after_file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION, scale_type)
+
+    gdf_before = gpd.read_parquet(before_file_path)
+    gdf_after = gpd.read_parquet(after_file_path)
+
+    service_types = sts.get_bn_service_types(project_info['region_id'])
+    results = []
+    for st in service_types:
+        name = st.name
+
+        before = _get_total_provision(gdf_before, name)
+        after = _get_total_provision(gdf_after, name)
+        delta = after - before
+
+        results.append({
+            'name': name,
+            'before': round(before,2),
+            'after': round(after,2),
+            'delta': round(delta,2)
+        })
+    return results
 
 def _evaluate_transport(project_scenario_id: int, city_model: City, scale: em.ScaleType):
     logger.info('Evaluating transport')
-    conn = Connectivity(city_model=city_model, verbose=False)
+    conn = WeightedConnectivity(city_model=city_model, verbose=False)
+    # conn = Connectivity(city_model=city_model, verbose=False)
     conn_gdf = conn.calculate()
-    file_path = _get_file_path(project_scenario_id, em.EffectType.PROVISION, scale)
+    file_path = _get_file_path(project_scenario_id, em.EffectType.TRANSPORT, scale)
     conn_gdf.to_parquet(file_path)
+    logger.success('Transport successfully evaluated!')
 
 
 def _evaluate_provision(project_scenario_id: int, city_model: City, scale: em.ScaleType):
@@ -233,35 +175,55 @@ def _evaluate_provision(project_scenario_id: int, city_model: City, scale: em.Sc
     blocks_gdf.to_parquet(file_path)
     logger.success('Provision successfully evaluated!')
 
+def _evaluation_exists(project_scenario_id : int, token : str):
+    exists = True
+    for effect_type in list(em.EffectType):
+        for scale_type in list(em.ScaleType):
+            file_path = _get_file_path(project_scenario_id, effect_type, scale_type)
+            if not os.path.exists(file_path):
+                exists = False
+    return exists
 
-def evaluate_effects(project_scenario_id: int, token: str):
-    # TODO проверяем, является ли этот сценарий базовым.
-    # Если не является, проверяем, посчитан ли у нас базовый и считаем его
-    logger.info('Fetching project info')
-    project_info = project_service.get_project_info(project_scenario_id, token)
-
+def evaluate_effects(project_scenario_id: int, token: str, reevaluate : bool = True):
+    logger.info(f'Fetching {project_scenario_id} project info')
+    
+    project_info = ps.get_project_info(project_scenario_id, token)
+    based_scenario_id = ps.get_based_scenario_id(project_info, token)
+    # if scenario isnt based, evaluate the based scenario
+    if project_scenario_id != based_scenario_id:
+        evaluate_effects(based_scenario_id, token, reevaluate=False)
+    
+    # if scenario exists and doesnt require reevaluation, we return
+    exists = _evaluation_exists(project_scenario_id, token)
+    if exists and not reevaluate:
+        logger.info(f'{project_scenario_id} evaluation already exists')
+        return
+    
     logger.info('Fetching region service types')
-    service_types = service_type_service.get_bn_service_types(project_info['region_id'])
+    service_types = sts.get_bn_service_types(project_info['region_id'])
     logger.info('Fetching physical object types')
-    physical_object_types = get_physical_object_types()
-    logger.info('Fetching scenario info')
-    scenario_gdf = get_scenario_gdf(project_scenario_id, token)
+    physical_object_types = ps.get_physical_object_types()
+    logger.info('Fetching scenario objects')
+    scenario_gdf = bs.get_scenario_gdf(project_scenario_id, token)
 
-    logger.info('Fetching city model')
-    project_model = _fetch_city_model(project_info=project_info,
+    logger.info('Fetching project model')
+    project_model = bs.fetch_city_model(project_info=project_info,
                                       service_types=service_types,
                                       physical_object_types=physical_object_types,
                                       scenario_gdf=scenario_gdf,
                                       scale=em.ScaleType.PROJECT)
 
-    context_model = _fetch_city_model(project_info=project_info,
+    logger.info('Fetching context model')
+    context_model = bs.fetch_city_model(project_info=project_info,
                                       service_types=service_types,
                                       physical_object_types=physical_object_types,
                                       scenario_gdf=scenario_gdf,
                                       scale=em.ScaleType.CONTEXT)
-
-    # _evaluate_transport(project_scenario_id, project_model)
+    
+    _evaluate_transport(project_scenario_id, project_model, em.ScaleType.PROJECT)
     _evaluate_provision(project_scenario_id, project_model, em.ScaleType.PROJECT)
 
-    # _evaluate_transport(project_scenario_id, context_model)
+    _evaluate_transport(project_scenario_id, context_model, em.ScaleType.CONTEXT)
     _evaluate_provision(project_scenario_id, context_model, em.ScaleType.CONTEXT)
+
+    logger.success(f'{project_scenario_id} evaluated successfully')
