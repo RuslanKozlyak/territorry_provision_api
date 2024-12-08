@@ -9,13 +9,6 @@ from api.utils.const import DEFAULT_CRS
 from . import project_service as ps
 from .. import effects_models as em
 
-
-def get_scenario_gdf(project_scenario_id, token):
-    context_with_obj = ps.get_context_with_obj_by_id(project_scenario_id, token)
-    scenario_gdf = gpd.GeoDataFrame.from_features(context_with_obj["features"])
-    return scenario_gdf.set_crs(DEFAULT_CRS)
-
-
 def _get_geoms_by_function(function_name, physical_object_types, scenario_gdf):
     valid_type_ids = {
         d['physical_object_type_id']
@@ -24,15 +17,6 @@ def _get_geoms_by_function(function_name, physical_object_types, scenario_gdf):
     }
     return scenario_gdf[scenario_gdf['physical_objects'].apply(
         lambda x: any(d.get('physical_object_type').get('id') in valid_type_ids for d in x))]
-
-
-# def get_boundaries(scenario_gdf: gpd.GeoDataFrame):
-#     united_geometry = scenario_gdf.geometry.unary_union
-#     convex_hull = united_geometry.convex_hull
-#     boundaries = gpd.GeoDataFrame(geometry=[convex_hull])
-#     boundaries = boundaries.set_crs(epsg=4326)
-#     return boundaries
-
 
 def _get_water(scenario_gdf, physical_object_types):
     water = _get_geoms_by_function('Водный объект', physical_object_types, scenario_gdf)
@@ -43,13 +27,13 @@ def _get_water(scenario_gdf, physical_object_types):
 
 def _get_roads(scenario_gdf, physical_object_types):
     roads = _get_geoms_by_function('Дорога', physical_object_types, scenario_gdf)
-    merged = roads.unary_union
-    if merged.geom_type == 'MultiLineString':
-        roads = gpd.GeoDataFrame(geometry=list(merged.geoms), crs=roads.crs)
-    else:
-        roads = gpd.GeoDataFrame(geometry=[merged], crs=roads.crs)
-    roads = roads.reset_index()
-    return roads
+    # merged = roads.unary_union
+    # if merged.geom_type == 'MultiLineString':
+    #     roads = gpd.GeoDataFrame(geometry=list(merged.geoms), crs=roads.crs)
+    # else:
+    #     roads = gpd.GeoDataFrame(geometry=[merged], crs=roads.crs)
+    roads = roads.explode(index_parts=False).reset_index()
+    return roads[roads.geom_type.isin(['LineString'])]
 
 
 def _get_buildings(scenario_gdf, physical_object_types):
@@ -151,12 +135,15 @@ def _update_buildings(city : City, scenario_gdf : gpd.GeoDataFrame, physical_obj
     city.update_buildings(buildings_gdf)
 
 def _update_services(city : City, service_types : list[ServiceType], scenario_gdf : gpd.GeoDataFrame) -> None:
+    # reset service types
+    city._service_types = {}
+    for st in service_types:
+        city.add_service_type(st)
+    # filter services and add to the model if exist
     services_gdf = _get_services(scenario_gdf)
     if services_gdf is None:
         return
     services_gdf = services_gdf.to_crs(city.crs).copy()
-    for st in service_types:
-        city.add_service_type(st)
     service_type_dict = {service.code: service for service in service_types}
     for service_type_code, st_gdf in services_gdf.groupby('service_type_id'):
         gdf = st_gdf.copy().to_crs(city.crs)

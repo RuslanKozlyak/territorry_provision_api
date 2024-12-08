@@ -2,13 +2,10 @@ import json
 
 import requests
 import shapely
+import geopandas as gpd
 from api.utils import const
 from loguru import logger
-
-def get_all_projects(token : str) -> dict:
-    res = requests.get(const.URBAN_API + f'/api/v1/projects', headers={'Authorization': f'Bearer {token}'})
-    res.raise_for_status()
-    return res.json()
+from .. import effects_models as em 
 
 def get_scenarios_by_project_id(project_id : int, token : str) -> dict:
   res = requests.get(const.URBAN_API + f'/api/v1/projects/{project_id}/scenarios', headers={'Authorization': f'Bearer {token}'})
@@ -20,22 +17,29 @@ def get_based_scenario_id(project_info, token):
     based_scenario_id = list(filter(lambda x: x['is_based'], scenarios))[0]['scenario_id']
     return based_scenario_id
 
-def get_context_with_obj_by_id(scenario_id : int, token : str):
-    res = requests.get(const.URBAN_API + f'/api/v1/scenarios/{scenario_id}/context/geometries_with_all_objects', headers={'Authorization': f'Bearer {token}'}, verify=False)
-    return res.json()
-    
-def get_physical_object_types():
-    res = requests.get(const.URBAN_API + f'/api/v1/physical_object_types', verify=False)
-    return res.json()
-
-def get_scenarios_by_project_id(project_id : int, token : str) -> dict:
-  res = requests.get(const.URBAN_API + f'/api/v1/projects/{project_id}/scenarios', headers={'Authorization': f'Bearer {token}'})
-  res.raise_for_status()
+def _get_scenario_objects(
+        scenario_id : int,
+        token : str,
+        scale_type : em.ScaleType,
+        physical_object_type_id : int | None = None, 
+        service_type_id : int | None = None, 
+        physical_object_function_id : int | None = None, 
+        urban_function_id : int | None = None
+    ):
+  headers = {'Authorization': f'Bearer {token}'}
+  res = requests.get('https://urban-api-107.idu.kanootoko.org' + f'/api/v1/scenarios/{scenario_id}/{"context/" if scale_type == em.ScaleType.CONTEXT else ""}/geometries_with_all_objects', params={
+      'physical_object_type_id': physical_object_type_id,
+      'service_type_id': service_type_id,
+      'physical_object_function_id' : physical_object_function_id,
+      'urban_function_id' : urban_function_id
+  }, headers=headers)
   return res.json()
 
-def get_context_with_obj_by_id(scenario_id : int, token : str):
-    res = requests.get(const.URBAN_API + f'/api/v1/scenarios/{scenario_id}/context/geometries_with_all_objects', headers={'Authorization': f'Bearer {token}'}, verify=False)
-    return res.json()
+def get_scenario_objects(scenario_id : int, token : str, *args, **kwargs) -> gpd.GeoDataFrame:
+  collections = [_get_scenario_objects(scenario_id, token, scale_type, *args, **kwargs) for scale_type in list(em.ScaleType)]
+  features = [feature for collection in collections for feature in collection['features']]
+  gdf = gpd.GeoDataFrame.from_features(features).set_crs(const.DEFAULT_CRS)
+  return gdf.drop_duplicates(subset=['object_geometry_id'])
     
 def get_physical_object_types():
     res = requests.get(const.URBAN_API + f'/api/v1/physical_object_types', verify=False)
