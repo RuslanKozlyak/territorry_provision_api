@@ -167,3 +167,9 @@ gdf_with_obj.geojson
 boundaries.parquet
 roads.parquet
 water.parquet
+.idea/misc.xml
+.idea/modules.xml
+.idea/territorry_provision_api.iml
+.idea/vcs.xml
+.idea/inspectionProfiles/profiles_settings.xml
+.idea/inspectionProfiles/Project_Default.xml
