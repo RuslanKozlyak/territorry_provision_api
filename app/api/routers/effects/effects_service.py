@@ -32,11 +32,17 @@ def _get_total_provision(gdf_orig, name):
 
 def _sjoin_gdfs(gdf_before : gpd.GeoDataFrame, gdf_after : gpd.GeoDataFrame):
     gdf_before = gdf_before.to_crs(gdf_after.crs)
+    # set i to identify intersections
+    gdf_before['i'] = gdf_before.index
+    gdf_after['i'] = gdf_after.index
     gdf_sjoin = gdf_after.sjoin(gdf_before, how='left', predicate='intersects', lsuffix='after', rsuffix='before')
-    gdf_sjoin['index_after'] = gdf_sjoin.index
-    gdf_sjoin['area'] = gdf_sjoin.apply(lambda s : gdf_before.loc[s['index_before'], 'geometry'].intersection(gdf_after.loc[s['index_after'], 'geometry']).area, axis=1)
+    # filter nans
+    gdf_sjoin = gdf_sjoin[~gdf_sjoin['i_before'].isna()]
+    gdf_sjoin = gdf_sjoin[~gdf_sjoin['i_after'].isna()]
+    # get intersections area and keep largest
+    gdf_sjoin['area'] = gdf_sjoin.apply(lambda s : gdf_before.loc[s['i_before'], 'geometry'].intersection(gdf_after.loc[s['i_after'], 'geometry']).area, axis=1)
     gdf_sjoin = gdf_sjoin.sort_values(by='area')
-    return gdf_sjoin.drop_duplicates(subset=['index_after'], keep='last')
+    return gdf_sjoin.drop_duplicates(subset=['i_after'], keep='last')
 
 def get_transport_layer(project_scenario_id: int, scale_type: em.ScaleType, token: str):
     project_info = ps.get_project_info(project_scenario_id, token)
