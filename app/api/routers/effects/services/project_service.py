@@ -27,7 +27,7 @@ def _get_scenario_objects(
         urban_function_id : int | None = None
     ):
   headers = {'Authorization': f'Bearer {token}'}
-  res = requests.get('https://urban-api-107.idu.kanootoko.org' + f'/api/v1/scenarios/{scenario_id}/{"context/" if scale_type == em.ScaleType.CONTEXT else ""}/geometries_with_all_objects', params={
+  res = requests.get(const.URBAN_API + f'/api/v1/scenarios/{scenario_id}/{"context/" if scale_type == em.ScaleType.CONTEXT else ""}/geometries_with_all_objects', params={
       'physical_object_type_id': physical_object_type_id,
       'service_type_id': service_type_id,
       'physical_object_function_id' : physical_object_function_id,
