@@ -35,15 +35,28 @@ def _get_roads(scenario_gdf, physical_object_types):
     roads = roads.explode(index_parts=False).reset_index()
     return roads[roads.geom_type.isin(['LineString'])]
 
+def _get_geoms_by_object_type_id(scenario_gdf, object_type_id):
+    return scenario_gdf[scenario_gdf['physical_objects'].apply(lambda x: any(d.get('physical_object_type').get('id') == object_type_id for d in x))]
 
 def _get_buildings(scenario_gdf, physical_object_types):
-    buildings = _get_geoms_by_function('Здание', physical_object_types, scenario_gdf)
+    LIVING_BUILDINGS_ID = 4
+    NON_LIVING_BUILDINGS_ID = 5
+    living_building = _get_geoms_by_object_type_id(scenario_gdf, LIVING_BUILDINGS_ID)
+    living_building['is_living'] = True
+    print(living_building)
+    non_living_buildings = _get_geoms_by_object_type_id(scenario_gdf, NON_LIVING_BUILDINGS_ID)
+    non_living_buildings['is_living'] = False
+
+    buildings = gpd.GeoDataFrame( pd.concat( [living_building, non_living_buildings], ignore_index=True) )
+    print(buildings)
+    # buildings = _get_geoms_by_function('Здание', physical_object_types, scenario_gdf)
     buildings['number_of_floors'] = 1
     # buildings['is_living'] = True
     buildings['footprint_area'] = buildings.geometry.area
     buildings['build_floor_area'] = buildings['footprint_area'] * buildings['number_of_floors']
     buildings['living_area'] = buildings.geometry.area
-    buildings['population'] = 100
+    buildings['population'] = 0
+    buildings['population'][buildings['is_living']] = 100
     buildings = buildings.reset_index()
     buildings = buildings[buildings.geometry.type != 'Point']
     return buildings[['geometry', 'number_of_floors', 'footprint_area', 'build_floor_area', 'living_area', 'population']]
