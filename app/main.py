@@ -42,5 +42,13 @@ app.add_middleware(GZipMiddleware, minimum_size=100)
 async def read_root():
     return RedirectResponse('/docs')
 
+@app.get('/tasks', tags=['Tasks'])
+def get_tasks() -> dict[str,str]:
+    return effects_controller.tasks
+
+@app.get('/task_status', tags=['Tasks'])
+def get_task_status(task_id : str) -> str:
+    return effects_controller.tasks[task_id]
+
 for controller in controllers:
     app.include_router(controller.router)

@@ -1,5 +1,6 @@
 import os
 from loguru import logger
+from uuid import uuid4
 from blocksnet.models import ServiceType
 from fastapi import APIRouter, BackgroundTasks, Depends
 from ...utils import auth, const, decorators
@@ -14,6 +15,7 @@ def on_startup(): # TODO оценка базовых сценариев
         logger.info(f'Creating data folder at {const.DATA_PATH}')
         os.mkdir(const.DATA_PATH)
 
+tasks = {}
 
 @router.get('/service_types')
 def get_service_types(region_id: int) -> list[ServiceType]:
@@ -38,7 +40,16 @@ def get_transport_layer(project_scenario_id: int, scale_type: em.ScaleType, toke
 def get_transport_data(project_scenario_id: int, scale_type: em.ScaleType, token: str = Depends(auth.verify_token)):
     return es.get_transport_data(project_scenario_id, scale_type, token)
 
+def _evaluate_effects_task(task_id : str, *args, **kwargs):
+    tasks[task_id] = 'pending'
+    try:
+        es.evaluate_effects(*args, **kwargs)
+        tasks[task_id] = 'success'
+    except:
+        tasks[task_id] = 'error'
+
 @router.post('/evaluate')
 def evaluate(background_tasks: BackgroundTasks, project_scenario_id: int, token: str = Depends(auth.verify_token)):
-    background_tasks.add_task(es.evaluate_effects, project_scenario_id, token)
-    return const.EVALUATION_RESPONSE_MESSAGE
+    task_id = str(uuid4())
+    background_tasks.add_task(_evaluate_effects_task, task_id, project_scenario_id, token)
+    return {'task_id' : task_id }
