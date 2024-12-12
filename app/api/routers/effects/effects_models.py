@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class EffectType(Enum):
   TRANSPORT='Транспорт'
   PROVISION='Обеспеченность'
+  CONNECTIVITY='Связность'
 
 class ScaleType(Enum):
   PROJECT='Проект'

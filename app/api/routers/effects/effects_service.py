@@ -12,7 +12,7 @@ from ...utils import const
 from . import effects_models as em
 from .services import blocksnet_service as bs, project_service as ps, service_type_service as sts
 
-for warning in [pd.errors.PerformanceWarning, RuntimeWarning, pd.errors.SettingWithCopyWarning, InsecureRequestWarning]:
+for warning in [pd.errors.PerformanceWarning, RuntimeWarning, pd.errors.SettingWithCopyWarning, InsecureRequestWarning, FutureWarning]:
     warnings.filterwarnings(action='ignore', category=warning)
 
 PROVISION_COLUMNS = ['provision', 'demand', 'demand_within']
@@ -65,7 +65,7 @@ def get_transport_layer(project_scenario_id: int, scale_type: em.ScaleType, toke
 
     # round digits
     for column in ['before', 'after', 'delta']:
-        gdf_delta[column] = gdf_delta[column].apply(round)
+        gdf_delta[column] = gdf_delta[column].apply(lambda v : round(v,1))
 
     return gdf_delta
 
@@ -95,9 +95,66 @@ def get_transport_data(project_scenario_id: int, scale_type: em.ScaleType, token
         delta = after - before
         items.append({
             'name': name,
-            'before': round(before),
-            'after': round(after),
-            'delta': round(delta)
+            'before': round(before,1),
+            'after': round(after,1),
+            'delta': round(delta,1)
+        })
+    return items
+
+def get_connectivity_layer(project_scenario_id: int, scale_type: em.ScaleType, token: str):
+    project_info = ps.get_project_info(project_scenario_id, token)
+    based_scenario_id = ps.get_based_scenario_id(project_info, token)
+
+    # get both files
+    before_file_path = _get_file_path(based_scenario_id, em.EffectType.CONNECTIVITY, scale_type)
+    after_file_path = _get_file_path(project_scenario_id, em.EffectType.CONNECTIVITY, scale_type)
+
+    gdf_before = gpd.read_parquet(before_file_path)
+    gdf_after = gpd.read_parquet(after_file_path)
+
+    # calculate delta
+    gdf_delta = _sjoin_gdfs(gdf_before, gdf_after)
+    gdf_delta = gdf_delta.rename(columns={
+        'connectivity_before': 'before',
+        'connectivity_after': 'after'
+    })[['geometry', 'before', 'after']]
+    gdf_delta['delta'] = gdf_delta['after'] - gdf_delta['before']
+
+    # round digits
+    for column in ['before', 'after', 'delta']:
+        gdf_delta[column] = gdf_delta[column].apply(lambda v : round(v,1))
+
+    return gdf_delta
+
+def get_connectivity_data(project_scenario_id: int, scale_type: em.ScaleType, token: str):
+    project_info = ps.get_project_info(project_scenario_id, token)
+    based_scenario_id = ps.get_based_scenario_id(project_info, token)
+
+    # get both files
+    before_file_path = _get_file_path(based_scenario_id, em.EffectType.CONNECTIVITY, scale_type)
+    after_file_path = _get_file_path(project_scenario_id, em.EffectType.CONNECTIVITY, scale_type)
+
+    gdf_before = gpd.read_parquet(before_file_path)
+    gdf_after = gpd.read_parquet(after_file_path)
+
+    # calculate chart data
+    names_funcs = {
+        'Среднее': np.mean,
+        'Медиана': np.median,
+        'Мин': np.min,
+        'Макс': np.max
+    }
+
+    items = []
+    for name, func in names_funcs.items():
+        before = func(gdf_before['connectivity'])
+        after = func(gdf_after['connectivity'])
+        delta = after - before
+        items.append({
+            'name': name,
+            'before': round(before,1),
+            'after': round(after,1),
+            'delta': round(delta,1)
         })
     return items
 
@@ -160,12 +217,20 @@ def get_provision_data(project_scenario_id: int, scale_type: em.ScaleType, token
 def _evaluate_transport(project_scenario_id: int, city_model: City, scale: em.ScaleType):
     logger.info('Evaluating transport')
     conn = WeightedConnectivity(city_model=city_model, verbose=False)
-    # conn = Connectivity(city_model=city_model, verbose=False)
     conn_gdf = conn.calculate()
     file_path = _get_file_path(project_scenario_id, em.EffectType.TRANSPORT, scale)
     conn_gdf.to_parquet(file_path)
     logger.success('Transport successfully evaluated!')
 
+def _evaluate_connectivity(project_scenario_id: int, city_model: City, scale: em.ScaleType):
+    logger.info('Evaluating connectivity')
+    conn = Connectivity(city_model=city_model, verbose=False)
+    conn_gdf = conn.calculate()
+    conn_gdf['connectivity'] = conn_gdf['connectivity'].astype('float32')
+    conn_gdf['connectivity'] = conn_gdf['connectivity'].apply(lambda v : np.nan if np.isinf(v) else v)
+    file_path = _get_file_path(project_scenario_id, em.EffectType.CONNECTIVITY, scale)
+    conn_gdf.to_parquet(file_path)
+    logger.success('Connectivity successfully evaluated!')
 
 def _evaluate_provision(project_scenario_id: int, city_model: City, scale: em.ScaleType):
     logger.info('Evaluating provision')
@@ -190,7 +255,14 @@ def _evaluation_exists(project_scenario_id : int, token : str):
                 exists = False
     return exists
 
-def evaluate_effects(project_scenario_id: int, token: str, reevaluate : bool = True):
+def delete_evaluation(project_scenario_id : int):
+    for effect_type in list(em.EffectType):
+        for scale_type in list(em.ScaleType):
+            file_path = _get_file_path(project_scenario_id, effect_type, scale_type)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
+def evaluate_effects(project_scenario_id : int, token: str, reevaluate : bool = True):
     logger.info(f'Fetching {project_scenario_id} project info')
     
     project_info = ps.get_project_info(project_scenario_id, token)
@@ -226,10 +298,15 @@ def evaluate_effects(project_scenario_id: int, token: str, reevaluate : bool = T
                                       scenario_gdf=scenario_gdf,
                                       scale=em.ScaleType.CONTEXT)
     
+    # project_model.to_pickle(f'{project_scenario_id}_project.pickle')
+    # context_model.to_pickle(f'{project_scenario_id}_context.pickle')
+
     _evaluate_transport(project_scenario_id, project_model, em.ScaleType.PROJECT)
+    _evaluate_connectivity(project_scenario_id, project_model, em.ScaleType.PROJECT)
     _evaluate_provision(project_scenario_id, project_model, em.ScaleType.PROJECT)
 
     _evaluate_transport(project_scenario_id, context_model, em.ScaleType.CONTEXT)
+    _evaluate_connectivity(project_scenario_id, context_model, em.ScaleType.CONTEXT)
     _evaluate_provision(project_scenario_id, context_model, em.ScaleType.CONTEXT)
 
     logger.success(f'{project_scenario_id} evaluated successfully')
