@@ -140,7 +140,6 @@ def get_connectivity_data(project_scenario_id: int, scale_type: em.ScaleType, to
     # calculate chart data
     names_funcs = {
         'Среднее': np.mean,
-        'Медиана': np.median,
         'Мин': np.min,
         'Макс': np.max
     }
@@ -156,6 +155,7 @@ def get_connectivity_data(project_scenario_id: int, scale_type: em.ScaleType, to
             'after': round(after,1),
             'delta': round(delta,1)
         })
+    print(items)
     return items
 
 def get_provision_layer(project_scenario_id: int, scale_type: em.ScaleType, service_type_id: int, token: str):
