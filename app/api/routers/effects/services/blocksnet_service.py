@@ -9,6 +9,9 @@ from api.utils.const import DEFAULT_CRS
 from . import project_service as ps
 from .. import effects_models as em
 
+SPEED_M_MIN = 60 * 1000 / 60
+GAP_TOLERANCE = 5
+
 def _get_geoms_by_function(function_name, physical_object_types, scenario_gdf):
     valid_type_ids = {
         d['physical_object_type_id']
@@ -27,13 +30,15 @@ def _get_water(scenario_gdf, physical_object_types):
 
 def _get_roads(scenario_gdf, physical_object_types):
     roads = _get_geoms_by_function('Дорога', physical_object_types, scenario_gdf)
-    # merged = roads.unary_union
-    # if merged.geom_type == 'MultiLineString':
-    #     roads = gpd.GeoDataFrame(geometry=list(merged.geoms), crs=roads.crs)
-    # else:
-    #     roads = gpd.GeoDataFrame(geometry=[merged], crs=roads.crs)
-    roads = roads.explode(index_parts=False).reset_index()
-    return roads[roads.geom_type.isin(['LineString'])]
+    merged = roads.unary_union
+    if merged.geom_type == 'MultiLineString':
+        roads = gpd.GeoDataFrame(geometry=list(merged.geoms), crs=roads.crs)
+    else:
+        roads = gpd.GeoDataFrame(geometry=[merged], crs=roads.crs)
+    roads = roads.explode(index_parts=False).reset_index(drop=True)
+    roads.geometry = momepy.close_gaps(roads, GAP_TOLERANCE)
+    roads = roads[roads.geom_type.isin(['LineString'])]
+    return roads
 
 def _get_geoms_by_object_type_id(scenario_gdf, object_type_id):
     return scenario_gdf[scenario_gdf['physical_objects'].apply(lambda x: any(d.get('physical_object_type').get('id') == object_type_id for d in x))]
@@ -43,12 +48,12 @@ def _get_buildings(scenario_gdf, physical_object_types):
     NON_LIVING_BUILDINGS_ID = 5
     living_building = _get_geoms_by_object_type_id(scenario_gdf, LIVING_BUILDINGS_ID)
     living_building['is_living'] = True
-    print(living_building)
+    # print(living_building)
     non_living_buildings = _get_geoms_by_object_type_id(scenario_gdf, NON_LIVING_BUILDINGS_ID)
     non_living_buildings['is_living'] = False
 
     buildings = gpd.GeoDataFrame( pd.concat( [living_building, non_living_buildings], ignore_index=True) )
-    print(buildings)
+    # print(buildings)
     # buildings = _get_geoms_by_function('Здание', physical_object_types, scenario_gdf)
     buildings['number_of_floors'] = 1
     # buildings['is_living'] = True
@@ -100,13 +105,15 @@ def _get_services(scenario_gdf) -> gpd.GeoDataFrame | None:
 
 
 def _roads_to_graph(roads):
+    roads.to_parquet(f'roads_{len(roads)}.parquet')
     graph = momepy.gdf_to_nx(roads)
     graph.graph['crs'] = CRS.to_epsg(roads.crs)
     graph = nx.DiGraph(graph)
-    for u, v, data in graph.edges(data=True):
-        data['time_min'] = data['mm_len'] / 1000 / 1000
-        data['weight'] = data['mm_len'] / 1000 / 1000
-        data['length_meter'] = data['mm_len'] / 1000
+    for _, _, data in graph.edges(data=True):
+        geometry = data['geometry']
+        data['time_min'] = geometry.length / SPEED_M_MIN
+        # data['weight'] = data['mm_len'] / 1000 / 1000
+        # data['length_meter'] = data['mm_len'] / 1000
     for n, data in graph.nodes(data=True):
         graph.nodes[n]['x'] = n[0]  # Assign X coordinate to node
         graph.nodes[n]['y'] = n[1]
@@ -122,9 +129,8 @@ def _get_boundaries(project_info : dict, scale : em.ScaleType) -> gpd.GeoDataFra
     local_crs = boundaries.estimate_utm_crs()
     return boundaries.to_crs(local_crs)
 
-def _generate_blocks(boundaries_gdf : gpd.GeoDataFrame, scenario_gdf : gpd.GeoDataFrame, physical_object_types : dict) -> gpd.GeoDataFrame:
+def _generate_blocks(boundaries_gdf : gpd.GeoDataFrame, roads_gdf : gpd.GeoDataFrame, scenario_gdf : gpd.GeoDataFrame, physical_object_types : dict) -> gpd.GeoDataFrame:
     water_gdf = _get_water(scenario_gdf, physical_object_types).to_crs(boundaries_gdf.crs)
-    roads_gdf = _get_roads(scenario_gdf, physical_object_types).to_crs(boundaries_gdf.crs)
 
     blocks_generator = BlocksGenerator(
         boundaries=boundaries_gdf,
@@ -135,8 +141,7 @@ def _generate_blocks(boundaries_gdf : gpd.GeoDataFrame, scenario_gdf : gpd.GeoDa
     blocks['land_use'] = None  # TODO ЗАмнить на норм land_use?? >> здесь должен быть этап определения лендюза по тому что есть в бд
     return blocks
 
-def _calculate_acc_mx(blocks_gdf : gpd.GeoDataFrame, scenario_gdf : gpd.GeoDataFrame, physical_object_types : dict) -> pd.DataFrame:
-    roads_gdf = _get_roads(scenario_gdf, physical_object_types).to_crs(blocks_gdf.crs)
+def _calculate_acc_mx(blocks_gdf : gpd.GeoDataFrame, roads_gdf : gpd.GeoDataFrame) -> pd.DataFrame:
     accessibility_processor = AccessibilityProcessor(blocks=blocks_gdf)
     graph = _roads_to_graph(roads_gdf)
     accessibility_matrix = accessibility_processor.get_accessibility_matrix(graph=graph)
@@ -179,11 +184,13 @@ def fetch_city_model(project_info: dict,
     scenario_gdf = scenario_gdf.to_crs(local_crs)
     scenario_gdf = scenario_gdf.clip(boundaries_gdf)
 
+    roads_gdf = _get_roads(scenario_gdf, physical_object_types)
+
     # generating blocks layer
-    blocks_gdf = _generate_blocks(boundaries_gdf, scenario_gdf, physical_object_types)
+    blocks_gdf = _generate_blocks(boundaries_gdf, roads_gdf, scenario_gdf, physical_object_types)
 
     # calculating accessibility matrix
-    acc_mx = _calculate_acc_mx(blocks_gdf, scenario_gdf, physical_object_types)
+    acc_mx = _calculate_acc_mx(blocks_gdf, roads_gdf)
 
     # initializing city model
     city = City(

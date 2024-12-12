@@ -48,8 +48,34 @@ def _evaluate_effects_task(task_id : str, *args, **kwargs):
     except:
         tasks[task_id] = 'error'
 
+@router.get('/connectivity_layer')
+@decorators.gdf_to_geojson
+def get_transport_layer(project_scenario_id: int, scale_type: em.ScaleType, token: str = Depends(auth.verify_token)):
+    return es.get_connectivity_layer(project_scenario_id, scale_type, token)
+
+@router.get('/connectivity_data')
+def get_transport_data(project_scenario_id: int, scale_type: em.ScaleType, token: str = Depends(auth.verify_token)):
+    return es.get_connectivity_data(project_scenario_id, scale_type, token)
+
+def _evaluate_effects_task(task_id : str, *args, **kwargs):
+    tasks[task_id] = 'pending'
+    try:
+        es.evaluate_effects(*args, **kwargs)
+        tasks[task_id] = 'success'
+    except Exception as e:
+        logger.error(e)
+        tasks[task_id] = 'error'
+
 @router.post('/evaluate')
 def evaluate(background_tasks: BackgroundTasks, project_scenario_id: int, token: str = Depends(auth.verify_token)):
     task_id = str(uuid4())
     background_tasks.add_task(_evaluate_effects_task, task_id, project_scenario_id, token)
     return {'task_id' : task_id }
+
+@router.delete('/evaluation')
+def delete_evaluation(project_scenario_id : int):
+    try:
+        es.delete_evaluation(project_scenario_id)
+        return 'oke'
+    except:
+        return 'oops'
