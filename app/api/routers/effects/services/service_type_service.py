@@ -4,7 +4,6 @@ import requests
 from api.utils import const
 from blocksnet.models import ServiceType
 
-
 def _get_service_types(region_id : int) -> pd.DataFrame:
   res = requests.get(const.URBAN_API + f'/api/v1/territory/{region_id}/service_types')
   res.raise_for_status()
@@ -12,7 +11,7 @@ def _get_service_types(region_id : int) -> pd.DataFrame:
   return df.set_index('service_type_id')
 
 def _get_normatives(region_id : int) -> pd.DataFrame:
-  res = requests.get(const.URBAN_API + f'/api/v1/territory/{region_id}/normatives')
+  res = requests.get(const.URBAN_API + f'/api/v1/territory/{region_id}/normatives', params={'year': const.NORMATIVES_YEAR})
   res.raise_for_status()
   df = pd.DataFrame(res.json())
   df['service_type_id'] = df['service_type'].apply(lambda st : st['id'])

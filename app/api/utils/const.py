@@ -4,6 +4,8 @@ API_TITLE = 'Effects API'
 API_DESCRIPTION = 'API for assessing territory transformation effects'
 EVALUATION_RESPONSE_MESSAGE = 'Evaluation started'
 DEFAULT_CRS = 4326
+NORMATIVES_YEAR = 2024
+
 if 'DATA_PATH' in os.environ:
   DATA_PATH = os.path.abspath('data')
 else:
